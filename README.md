@@ -1,0 +1,2 @@
+# daemon
+Gossamer IRC Daemon
