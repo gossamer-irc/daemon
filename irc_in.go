@@ -105,6 +105,19 @@ func (msg PMIrcClientMessage) String() string {
 	return fmt.Sprintf("pm(%s, %s", msg.To, msg.Message)
 }
 
+type ChannelIrcClientMessage struct {
+	To      string
+	Message string
+}
+
+func (msg ChannelIrcClientMessage) isIrcClientMessage() bool {
+	return true
+}
+
+func (msg ChannelIrcClientMessage) String() string {
+	return fmt.Sprintf("chanmsg(%s, %s", msg.To, msg.Message)
+}
+
 type ConnectIrcClientMessage struct {
 	Target string
 	Host   string
@@ -117,6 +130,33 @@ func (msg ConnectIrcClientMessage) isIrcClientMessage() bool {
 
 func (msg ConnectIrcClientMessage) String() string {
 	return fmt.Sprintf("connect(%s, %d)", msg.Host, msg.Port)
+}
+
+type JoinIrcClientMessage struct {
+	Targets []string
+	Keys    []string
+}
+
+func (msg JoinIrcClientMessage) isIrcClientMessage() bool {
+	return true
+}
+
+func (msg JoinIrcClientMessage) String() string {
+	return fmt.Sprintf("join([%s], [%s])", strings.Join(msg.Targets, ", "), strings.Join(msg.Keys, ", "))
+}
+
+type ChannelModeChangeIrcClientMessage struct {
+	Target string
+	Mode   string
+	Arg    []string
+}
+
+func (msg ChannelModeChangeIrcClientMessage) isIrcClientMessage() bool {
+	return true
+}
+
+func (msg ChannelModeChangeIrcClientMessage) String() string {
+	return fmt.Sprintf("chmode(%s, %s, [%s])", msg.Target, msg.Mode, strings.Join(msg.Arg, ", "))
 }
 
 func InterpretIrc(msg *GenericIrcClientMessage) IrcClientMessage {
@@ -149,6 +189,12 @@ func InterpretIrc(msg *GenericIrcClientMessage) IrcClientMessage {
 				MinArgs: 2,
 			}
 		}
+		if strings.HasPrefix(msg.Args[0], "#") {
+			return &ChannelIrcClientMessage{
+				To:      msg.Args[0],
+				Message: msg.Args[1],
+			}
+		}
 		return &PMIrcClientMessage{
 			To:      msg.Args[0],
 			Message: msg.Args[1],
@@ -173,6 +219,44 @@ func InterpretIrc(msg *GenericIrcClientMessage) IrcClientMessage {
 			Target: msg.Args[0],
 			Host:   msg.Args[1],
 			Port:   port,
+		}
+	case "JOIN":
+		if len(msg.Args) < 1 {
+			return &InvalidIrcClientMessage{
+				Command: "JOIN",
+				MinArgs: 1,
+			}
+		}
+		var keys []string = nil
+		if len(msg.Args) > 1 {
+			keys = strings.Split(msg.Args[0], ",")
+		}
+		return &JoinIrcClientMessage{
+			Targets: strings.Split(msg.Args[0], ","),
+			Keys:    keys,
+		}
+	case "MODE":
+		if len(msg.Args) < 1 {
+			return &InvalidIrcClientMessage{
+				Command: "MODE",
+				MinArgs: 1,
+			}
+		}
+		tname := msg.Args[0]
+		if strings.HasPrefix(tname, "#") {
+			// Channel mode.
+			if len(msg.Args) == 1 {
+				// Request for the current channel mode.
+				return msg
+			} else {
+				return &ChannelModeChangeIrcClientMessage{
+					Target: tname,
+					Mode:   msg.Args[1],
+					Arg:    msg.Args[2:],
+				}
+			}
+		} else {
+			return msg
 		}
 	default:
 		return msg

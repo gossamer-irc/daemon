@@ -1,14 +1,15 @@
 package main
 
 import (
-	"github.com/gossamer-irc/lib"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/gossamer-irc/lib"
 	"io/ioutil"
 	"log"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Ircd struct {
@@ -138,6 +139,19 @@ func (ircd *Ircd) FindClientByRef(context *lib.Client, ref string) (client *lib.
 	return
 }
 
+func (ircd *Ircd) ExpandChannelRef(context *lib.Client, ref string) (channelName string, subnet *lib.Subnet, found bool, qualified bool) {
+	parts := strings.SplitN(ref, ":", 2)
+	subnet = context.Subnet
+	channelName = ref
+	found = true
+	if len(parts) == 2 {
+		qualified = true
+		channelName = parts[1]
+		subnet, found = ircd.node.Subnet[strings.ToLower(parts[0])]
+	}
+	return
+}
+
 func (_ *Ircd) ClientAsSeenBy(client, context *lib.Client) IrcNIH {
 	if client.Subnet == context.Subnet {
 		return IrcNIH{client.Nick, client.Ident, client.Host}
@@ -157,6 +171,43 @@ func (ircd *Ircd) Handle(irc *IrcConnection, client *lib.Client, rawEvent IrcCli
 		ircd.node.PrivateMessage(client, to, event.Message)
 	case *ConnectIrcClientMessage:
 		ircd.InitiateConnection(event.Target, event.Host, event.Port)
+	case *JoinIrcClientMessage:
+		ircd.ClientJoin(client, irc, event)
+	case *ChannelIrcClientMessage:
+		channelName, subnet, found, qualified := ircd.ExpandChannelRef(client, event.To[1:])
+		if !qualified || !found {
+			// TODO: better error handling
+			log.Printf("Channel not found [%s] - %v / %v", event.To, found, qualified)
+			return
+		}
+
+		channel, foundChan := subnet.Channel[channelName]
+		if !foundChan {
+			log.Printf("Failed to find channel %s in subnet %s", channelName, subnet.Name)
+			// TODO: send channel not found error
+			return
+		}
+
+		ircd.node.ChannelMessage(client, channel, event.Message)
+	case *ChannelModeChangeIrcClientMessage:
+		channelName, subnet, found, qualified := ircd.ExpandChannelRef(client, event.Target[1:])
+		if !qualified || !found {
+			log.Printf("Channel not found [%s] - %v / %v", event.Target, found, qualified)
+			return
+		}
+
+		channel, foundChan := subnet.Channel[channelName]
+		if !foundChan {
+			log.Printf("Failed to find channel %s in subnet %s", channelName, subnet.Name)
+			return
+		}
+
+		delta, memberDelta := lib.ParseChannelModeString(event.Mode, event.Arg, func(name string) (*lib.Client, bool) {
+			target, found := ircd.FindClientByRef(client, name)
+			return target, found
+		})
+
+		ircd.node.ChangeChannelMode(client, channel, delta, memberDelta)
 	}
 }
 
@@ -172,4 +223,30 @@ func (ircd *Ircd) InitiateConnection(target, host string, port uint16) {
 		return
 	}
 	ircd.node.BeginLink(conn, conn, nil)
+}
+
+func (ircd *Ircd) ClientJoin(client *lib.Client, conn *IrcConnection, join *JoinIrcClientMessage) {
+	// Process all the joins.
+	for _, target := range join.Targets {
+		first, _ := utf8.DecodeRuneInString(target)
+		if first != '#' {
+			// Bad channel.
+			panic("TODO: send appropriate error message")
+		}
+		channelName, subnet, found, qualified := ircd.ExpandChannelRef(client, target[1:])
+		if !qualified {
+			// TODO: Send +i message instead.
+			conn.Send(&IrcPartMessage{
+				From:    IrcNIH{client.Nick, client.Ident, client.Host},
+				To:      target,
+				Message: fmt.Sprintf("Joining you to #%s:%s instead.", subnet.Name, target[1:]),
+			})
+		}
+
+		if !found {
+			panic("TODO: send appropriate error message")
+		}
+
+		ircd.node.JoinOrCreateChannel(client, subnet, channelName)
+	}
 }

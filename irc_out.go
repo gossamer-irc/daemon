@@ -87,3 +87,87 @@ type IrcNickInUse struct {
 func (msg IrcNickInUse) ToIrc(ircd *Ircd) string {
 	return fmt.Sprintf(":%s 433 %s :Nickname is already in use", ircd.node.Me.Name, msg.Nick)
 }
+
+type IrcJoinMessage struct {
+	From IrcNIH
+	To   string
+}
+
+func (msg IrcJoinMessage) ToIrc(ircd *Ircd) string {
+	return fmt.Sprintf(":%s JOIN %s", msg.From, msg.To)
+}
+
+type IrcTopicNumericMessage struct {
+	To      string
+	Channel string
+	Topic   string
+}
+
+func (msg IrcTopicNumericMessage) ToIrc(ircd *Ircd) string {
+	return fmt.Sprintf(":%s 332 %s %s :%s", ircd.node.Me.Name, msg.To, msg.Channel, msg.Topic)
+}
+
+type IrcTopicOriginMessage struct {
+	To      string
+	Channel string
+	Author  string
+	Ts      uint64
+}
+
+func (msg IrcTopicOriginMessage) ToIrc(ircd *Ircd) string {
+	return fmt.Sprintf(":%s 333 %s %s %s %d", ircd.node.Me.Name, msg.To, msg.Channel, msg.Author, msg.Ts)
+}
+
+type IrcChannelNameEntry struct {
+	Prefix string
+	Nick   string
+}
+
+type IrcChannelNamesReply struct {
+	To      string
+	Channel string
+	Name    []IrcChannelNameEntry
+}
+
+func (msg IrcChannelNamesReply) ToIrc(ircd *Ircd) string {
+	names := make([]string, 0, len(msg.Name))
+	for _, entry := range msg.Name {
+		names = append(names, fmt.Sprintf("%s%s", entry.Prefix, entry.Nick))
+	}
+	return fmt.Sprintf(":%s 353 %s = %s :%s", ircd.node.Me.Name, msg.To, msg.Channel, strings.Join(names, " "))
+}
+
+type IrcChannelMessage struct {
+	From    IrcNIH
+	To      string
+	Message string
+}
+
+func (msg IrcChannelMessage) ToIrc(ircd *Ircd) string {
+	return fmt.Sprintf(":%s PRIVMSG %s :%s", msg.From, msg.To, msg.Message)
+}
+
+type IrcPartMessage struct {
+	From    IrcNIH
+	To      string
+	Message string
+}
+
+func (msg IrcPartMessage) ToIrc(ircd *Ircd) string {
+	return fmt.Sprintf(":%s PART %s :%s", msg.From, msg.To, msg.Message)
+}
+
+type IrcChannelModeMessage struct {
+	From IrcNIH
+	To   string
+	Mode string
+	Arg  []string
+}
+
+func (msg IrcChannelModeMessage) ToIrc(ircd *Ircd) string {
+	space := ""
+	if len(msg.Arg) > 0 {
+		space = " "
+	}
+	return fmt.Sprintf(":%s MODE %s %s%s%s", msg.From, msg.To, msg.Mode, space, strings.Join(msg.Arg, " "))
+}
