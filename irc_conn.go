@@ -74,6 +74,8 @@ func (irc *IrcConnection) readLoop() {
 	for {
 		select {
 		case <-irc.exit:
+			close(irc.trans)
+			irc.trans = nil
 			return
 		default:
 			// Attempt a read.

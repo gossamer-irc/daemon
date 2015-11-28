@@ -49,7 +49,7 @@ func (ircd *Ircd) OnChannelModeChange(channel *lib.Channel, by *lib.Client, delt
 		conn.Send(&IrcChannelModeMessage{
 			From: ircd.ClientAsSeenBy(by, member),
 			To:   fmt.Sprintf("#%s:%s", channel.Subnet.Name, channel.Name),
-			Mode: lib.SerializeChannelModes(delta, memberDelta, func(target *lib.Client) string {
+			Mode: lib.StringifyChannelModes(delta, memberDelta, func(target *lib.Client) string {
 				return ircd.ClientAsSeenBy(target, member).Nick
 			}),
 		})
