@@ -46,8 +46,12 @@ func (ircd *Ircd) OnChannelMessage(from *lib.Client, to *lib.Channel, message st
 
 func (ircd *Ircd) OnChannelModeChange(channel *lib.Channel, by *lib.Client, delta lib.ChannelModeDelta, memberDelta []lib.MemberModeDelta) {
 	ircd.ForEachLocalMember(channel, func(conn *IrcConnection, member *lib.Client, _ *lib.Membership) {
+		from := ircd.node.Me.Name
+		if by != nil {
+			from = ircd.ClientAsSeenBy(by, member).String()
+		}
 		conn.Send(&IrcChannelModeMessage{
-			From: ircd.ClientAsSeenBy(by, member),
+			From: from,
 			To:   fmt.Sprintf("#%s:%s", channel.Subnet.Name, channel.Name),
 			Mode: lib.StringifyChannelModes(delta, memberDelta, func(target *lib.Client) string {
 				return ircd.ClientAsSeenBy(target, member).Nick

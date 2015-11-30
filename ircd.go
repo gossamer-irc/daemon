@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"log"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -26,9 +27,11 @@ type Ircd struct {
 
 	tlsCert   tls.Certificate
 	tlsCaPool *x509.CertPool
+
+	wg *sync.WaitGroup
 }
 
-func NewIrcd(network, server, serverDesc, subnet string) (ircd *Ircd) {
+func NewIrcd(network, server, serverDesc, subnet string, wg *sync.WaitGroup) (ircd *Ircd) {
 	config := lib.Config{
 		NetName:           network,
 		ServerName:        server,
@@ -43,8 +46,9 @@ func NewIrcd(network, server, serverDesc, subnet string) (ircd *Ircd) {
 		clientByConn: make(map[*IrcConnection]*lib.Client),
 		connByClient: make(map[*lib.Client]*IrcConnection),
 		pending:      make(map[*IrcConnection]*PendingClient),
+		wg:           wg,
 	}
-	ircd.node = lib.NewNode(config, ircd)
+	ircd.node = lib.NewNode(config, ircd, wg)
 	return
 }
 
@@ -118,7 +122,9 @@ func (ircd *Ircd) Run() {
 			}
 		case event := <-ircd.linkEvent:
 			log.Printf("Connection from %s", event.Server)
-			ircd.node.BeginLink(event.Conn, event.Conn, nil)
+			ircd.node.Do(func() {
+				ircd.node.BeginLink(event.Conn, event.Conn, nil, event.Server)
+			})
 		}
 	}
 }
@@ -222,7 +228,9 @@ func (ircd *Ircd) InitiateConnection(target, host string, port uint16) {
 		log.Printf("Error linking to %s:%d: %s", host, port, err)
 		return
 	}
-	ircd.node.BeginLink(conn, conn, nil)
+	ircd.node.Do(func() {
+		ircd.node.BeginLink(conn, conn, nil, fmt.Sprintf("%s:%d", host, port))
+	})
 }
 
 func (ircd *Ircd) ClientJoin(client *lib.Client, conn *IrcConnection, join *JoinIrcClientMessage) {

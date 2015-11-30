@@ -158,7 +158,7 @@ func (msg IrcPartMessage) ToIrc(ircd *Ircd) string {
 }
 
 type IrcChannelModeMessage struct {
-	From IrcNIH
+	From string
 	To   string
 	Mode string
 	Arg  []string

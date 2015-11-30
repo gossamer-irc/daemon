@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var network, server, serverDesc, subnet, clientListens, serverListens string
@@ -28,7 +29,9 @@ func main() {
 		return
 	}
 
-	ircd := NewIrcd(network, server, serverDesc, subnet)
+	var wg sync.WaitGroup
+
+	ircd := NewIrcd(network, server, serverDesc, subnet, &wg)
 
 	ircd.LoadTls(networkCa, certificate, privateKey)
 
@@ -88,6 +91,7 @@ func main() {
 
 	log.Printf("Starting ircd...")
 	ircd.Run()
+	wg.Wait()
 }
 
 func validate() (valid bool) {
@@ -102,7 +106,7 @@ func validate() (valid bool) {
 	}
 	if subnet == "" {
 		valid = false
-		log.Printf("Must specify --subnet")
+		log.Printf("Must specify --default_subnet")
 	}
 	if serverDesc == "" {
 		log.Printf("--server_desc not specified, description will be empty")

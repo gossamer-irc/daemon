@@ -5,6 +5,7 @@ import (
 	"github.com/gossamer-irc/lib"
 	"io"
 	"log"
+	"sync"
 )
 
 type IrcConnectionEvent struct {
@@ -29,13 +30,14 @@ func NewIrcConnection(ircd *Ircd, reader io.Reader, writer io.WriteCloser, recv 
 		ircd:   ircd,
 		reader: bufio.NewReaderSize(reader, 512),
 		// TODO: configurable buffer size
-		sendQ: lib.NewSendQ(writer, 2048),
+		sendQ: lib.NewSendQ(writer, 2048, ircd.wg),
 		trans: make(chan IrcConnectionEvent),
 		recv:  recv,
 		exit:  make(chan struct{}),
 	}
-	go irc.controlLoop()
-	go irc.readLoop()
+	ircd.wg.Add(2)
+	go irc.controlLoop(ircd.wg)
+	go irc.readLoop(ircd.wg)
 	return irc
 }
 
@@ -48,7 +50,8 @@ func (irc *IrcConnection) Send(msg IrcMessage) {
 	irc.sendQ.Write([]byte("\r\n"))
 }
 
-func (irc *IrcConnection) controlLoop() {
+func (irc *IrcConnection) controlLoop(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		select {
 		case event := <-irc.trans:
@@ -70,7 +73,8 @@ func (irc *IrcConnection) controlLoop() {
 	}
 }
 
-func (irc *IrcConnection) readLoop() {
+func (irc *IrcConnection) readLoop(wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		select {
 		case <-irc.exit:

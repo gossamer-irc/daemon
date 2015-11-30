@@ -33,16 +33,18 @@ func (ircd *Ircd) NewLinkListener(host string, port uint16) *LinkListener {
 		Ircd:     ircd,
 		Listener: listener,
 	}
+	ircd.wg.Add(1)
 	go ll.Run()
 	return ll
 }
 
 func (ll *LinkListener) Run() {
+	defer ll.Ircd.wg.Done()
 	for {
 		rawConn, err := ll.Listener.Accept()
 		if err != nil {
 			log.Printf("Accept() error: %s", err)
-			continue
+			return
 		}
 
 		tlsConn := rawConn.(*tls.Conn)
