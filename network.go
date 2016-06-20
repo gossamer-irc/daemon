@@ -34,6 +34,10 @@ func (ircd *Ircd) OnChannelJoin(channel *lib.Channel, client *lib.Client, member
 	})
 }
 
+func (ircd *Ircd) OnChannelPart(channel *lib.Channel, client *lib.Client, reason string) {
+	panic("unimplemented")
+}
+
 func (ircd *Ircd) OnChannelMessage(from *lib.Client, to *lib.Channel, message string) {
 	ircd.ForEachLocalMember(to, func(conn *IrcConnection, member *lib.Client, _ *lib.Membership) {
 		conn.Send(&IrcChannelMessage{
